@@ -1,0 +1,7 @@
+# A sample config file, remove this line before using
+
+[paths]
+
+dir = /Users/.../your/dir
+data = data/eurosat/2750 
+rseed = 42

@@ -1,8 +1,8 @@
 # Fine tune a CNN on Eurosat
 
-#### Data pipeline 
+#### Data pipeline - move to src folder
 
-- [ ] Train/val/test split — 70/15/15, stratified by class. Fix the random seed.
+- [x] Train/val/test split — 70/15/15, stratified by class. Fix the random seed.
 - [x] Check class balance. Note any imbalance now so you're not confused by it later.
 - [ ] `transforms`: resize to 224, normalize with ImageNet mean/std (required for pretrained weights), random horizontal + vertical flip on train only.
   - Vertical flip is fine here in a way it isn't for natural images — overhead imagery has no canonical "up." Worth knowing why.
@@ -22,4 +22,3 @@
 - [x] `pip install torch torchvision matplotlib scikit-learn`
 - [x] Download EuroSAT RGB (27,000 images, 64×64, 10 land-use classes, ~2 GB). Available through `torchvision.datasets.EuroSAT` or from the original release.
 - [x] Verify it loads and display a 3×3 grid of images with class labels. **Look at the data before modeling it.**
-

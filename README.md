@@ -1,4 +1,5 @@
 # Fine-tune a CNN on EuroSAT Images
+#### _Learning how PyTorch is used for image classification._
 
 ## Project Layout
 

@@ -11,6 +11,9 @@ from sklearn.model_selection import train_test_split
 import configparser
 from pathlib import Path
 import logging
+import torch
+from torchvision.models import ResNet18_Weights
+
 
 # set up logging
 logger = logging.getLogger(__name__)
@@ -23,7 +26,7 @@ def setup_logging(level=logging.DEBUG, logfile=ROOT / "logs" / "train.log"):
         filename=logfile,
         level=level,
         format="%(asctime)s %(levelname)-8s | %(message)s",
-        datefmt="%H:%M:%S",
+        datefmt="%Y-%m-%d %H:%M:%S",
         force=True,
     )
 
@@ -73,7 +76,7 @@ def training_splits(_df: pd.DataFrame):
             stratify=val_test['strata_id'], 
             random_state=seed
             )
-        logging.debug(f"The shape of \tx_train: {x_train.shape}\n\t\t\t\t\t\t\t\t\t\tx_val:   {x_val.shape}\n\t\t\t\t\t\t\t\t\t\tx_test:  {x_test.shape}")
+        logging.debug(f"The shape of \tx_train: {x_train.shape}\n\t\t\t\t\t\t\t\t\t\tx_val:   {x_val.shape}\n\t\t\t\t\t\t\t\t\t\t\t\tx_test:  {x_test.shape}")
 
         return x_train, x_val, x_test
 
@@ -81,16 +84,31 @@ def training_splits(_df: pd.DataFrame):
         logging.debug(f"x_train, x_val, and x_test were not created: \n\t{e}")
         return None
 
-def resize_images(_s):
+def transformations(_is_training: bool, _mean: list, _std: list):
     """Create a transformation object
 
     Args: 
-        _df: dataframe if images to resize
-        _s: desired image size
+        _is_training: if the transformations should be for training images
+        _mean: list of the means to normalize to (from ImageNet)
+        _std: list of the standard devs to normalize to (from ImageNet)
 
     """
-    return transforms.Resize(_s)
-     
+    logging.debug(f"training a training dataset: \t{_is_training}")
+    _all_trans = [transforms.Resize(224), # takes an image
+            transforms.ToImage(),
+            transforms.ToDtype(torch.float32, scale=True),
+            transforms.Normalize(_mean, _std)] # operates on a tensor of floats)
+    _train_trans = [
+            transforms.RandomHorizontalFlip(p=0.5), # image or tensor input
+            transforms.RandomVerticalFlip(p=0.5)]
+
+    if _is_training:
+        _trans = _all_trans + _train_trans
+    else: 
+        _trans = _all_trans
+
+    logging.debug(f"the transformations are:\t\t\t\t\t{_trans}")
+    return transforms.Compose(_trans)
 
 if __name__ == "__main__":
     setup_logging()
@@ -108,8 +126,16 @@ if __name__ == "__main__":
     logger.debug(f"Randomly assign training, val, test indices")
     x_train, x_val, x_test = training_splits(data_indices)
 
-    logger.debug(f"resize images to 224 for ResNet")
+    logger.debug(f"create training transformations for ResNet")
+    preprocess = ResNet18_Weights.IMAGENET1K_V1.transforms()
+    rnet_mean, rnet_std = preprocess.mean, preprocess.std
+    trans = transformations(True, rnet_mean, rnet_std)
 
+    logger.debug("run transformations on image")
+    
+    tst_img = ds.loader(ds.samples[3][0])
+    tst_out = trans(tst_img)
+    logger.debug(f"shape of output:\t\t\t\t\t\t\t{tst_out.shape}")
 
     logging.debug(f"End process.\n\n")
     

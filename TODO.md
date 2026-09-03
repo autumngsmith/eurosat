@@ -4,11 +4,11 @@
 
 - [x] Train/val/test split — 70/15/15, stratified by class. Fix the random seed.
 - [x] Check class balance. Note any imbalance now so you're not confused by it later.
-- [ ] `transforms`: 
-    - [ ] resize to 224 -- in progress
-    - [ ] normalize with ImageNet mean/std (required for pretrained weights)
-    - [ ] random horizontal + vertical flip on train only
-  - Vertical flip is fine here in a way it isn't for natural images — overhead imagery has no canonical "up." Worth knowing why.
+- [x] `transforms`: 
+    - [x] resize to 224 -- in progress
+    - [x] normalize with ImageNet mean/std (required for pretrained weights)
+    - [x] random horizontal + vertical flip on train only
+        - Vertical flip is fine here in a way it isn't for natural images — overhead imagery has no canonical "up." Worth knowing why.
 - [ ] `DataLoader` for each split. Batch size 32, `shuffle=True` on train only.
 
 

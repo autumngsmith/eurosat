@@ -12,15 +12,24 @@ import configparser
 from pathlib import Path
 import logging
 import torch
+from torchvision.models import resnet18
 from torchvision.models import ResNet18_Weights
+from torch.utils.data import DataLoader 
+from torch.utils.data import Dataset
+from torchvision.io import decode_image
+from torch import nn
 
+ROOT = Path(__file__).resolve().parent
+
+# read config file
+cfg = configparser.ConfigParser()
+cfg.read(ROOT / "config.cfg")
 
 # set up logging
 logger = logging.getLogger(__name__)
 
-ROOT = Path(__file__).resolve().parent
-
 def setup_logging(level=logging.DEBUG, logfile=ROOT / "logs" / "train.log"):
+    """Logging setup, debug"""
     logfile.parent.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
         filename=logfile,
@@ -30,59 +39,79 @@ def setup_logging(level=logging.DEBUG, logfile=ROOT / "logs" / "train.log"):
         force=True,
     )
 
-# read config file
-cfg = configparser.ConfigParser()
-cfg.read(ROOT / "config.cfg")
+# Classes
 
-# define methods
-def get_classes(): 
-    return True
+class EuroSAT_dataset(Dataset):
+    """
+    Template taken directly from pytorch documentation on the Dataset custom class implementation
+    We are not reading live data, so this custom dataset template is perfered.
+    """
+    def __init__(self, _df: pd.DataFrame,  _transform=None, _target_transform=None):
+        """
+        Args:
+            _df: dataframe with image files and classes: `path to image, strata id, strata label`
+            transform: transformations to apply to the images
+            target_transform: apply transformations to the target var (class)
+        """
+        self.img_labels = _df
+        self.transform = _transform
+        self.target_transform = _target_transform
+
+    def __len__(self):
+        """
+        Length of the dataset (num records)"""
+        return len(self.img_labels)
+
+    def __getitem__(self, idx):
+        """
+        Returns a pair of image, label as indiviudal variables    
+        `return image, label`
+        """
+        img_path = self.img_labels.iloc[idx, 0]
+        image = decode_image(img_path)
+        label = self.img_labels.iloc[idx, 1]
+        if self.transform:
+            image = self.transform(image)
+        if self.target_transform:
+            label = self.target_transform(label)
+        return image, label
+
+# Methods
 
 def load_data(dir: str): 
     "Loads EuroSAT data into the given directory; a folder `data/eurosat/2750` with all of the images will be created in said directory.\nReturns `ds` - the object that includes strata info"
-    try:
-        PATH = os.path.join(cfg['paths']['dir'], 'data')
-        _ds = EuroSAT(root=PATH, download=True)
-        logging.debug(f"data successfully read to: {PATH}")
-        return _ds
-    except Exception as e:
-        logger.debug(f"Data could not be read, the error is as follows:\n\t{e}")
+    PATH = os.path.join(cfg['paths']['dir'], 'data')
+    _ds = EuroSAT(root=PATH, download=True)
+    logger.debug(f"data successfully read to: {PATH}")
+    return _ds
 
 def map_strata(_ds: EuroSAT):
-    try:
-        _strata = dict(enumerate(_ds.classes))
-        _cols = ["file_path", "strata_id"]
-        _data_indices = pd.DataFrame(_ds.samples, columns=_cols)
-        _data_indices["strata_name"] = _data_indices["strata_id"].map(_strata)
-        logger.debug("strata id to strata name mapping successful")
-        return _data_indices
-    except Exception as e:
-        logger.debug(f"Strata could not be mapped, the error is as follows:\n\t{e}")
-        return None
+    _strata = dict(enumerate(_ds.classes))
+    _cols = ["file_path", "strata_id"]
+    _data_indices = pd.DataFrame(_ds.samples, columns=_cols)
+    _data_indices["strata_name"] = _data_indices["strata_id"].map(_strata)
+    logger.debug("strata id to strata name mapping successful")
+    return _data_indices
 
 def training_splits(_df: pd.DataFrame):
-    try:
-        x_train, val_test = train_test_split(
-            _df, 
-            test_size=0.3, 
-            stratify=_df['strata_id'], 
-            random_state=seed
-            )
-        logging.debug("x_train and val_test created, creating x_val and x_test")
 
-        x_val, x_test = val_test = train_test_split(
-            val_test, 
-            test_size=0.5, 
-            stratify=val_test['strata_id'], 
-            random_state=seed
-            )
-        logging.debug(f"The shape of \tx_train: {x_train.shape}\n\t\t\t\t\t\t\t\t\t\tx_val:   {x_val.shape}\n\t\t\t\t\t\t\t\t\t\t\t\tx_test:  {x_test.shape}")
+    x_train, val_test = train_test_split(
+        _df, 
+        test_size=0.3, 
+        stratify=_df['strata_id'], 
+        random_state=seed
+        )
+    logger.debug("x_train and val_test created, creating x_val and x_test")
 
-        return x_train, x_val, x_test
+    x_val, x_test = val_test = train_test_split(
+        val_test, 
+        test_size=0.5, 
+        stratify=val_test['strata_id'], 
+        random_state=seed
+        )
+    logger.debug(f"The shape of \tx_train: {x_train.shape}\n\t\t\t\t\t\t\t\t\t\tx_val:   {x_val.shape}\n\t\t\t\t\t\t\t\t\t\t\t\tx_test:  {x_test.shape}")
 
-    except Exception as e: 
-        logging.debug(f"x_train, x_val, and x_test were not created: \n\t{e}")
-        return None
+    return x_train, x_val, x_test
 
 def transformations(_is_training: bool, _mean: list, _std: list):
     """Create a transformation object
@@ -93,10 +122,9 @@ def transformations(_is_training: bool, _mean: list, _std: list):
         _std: list of the standard devs to normalize to (from ImageNet)
 
     """
-    logging.debug(f"training a training dataset: \t{_is_training}")
-    _all_trans = [transforms.Resize(224), # takes an image
-            transforms.ToImage(),
-            transforms.ToDtype(torch.float32, scale=True),
+    logger.debug(f"training a training dataset: \t{_is_training}")
+    _all_trans = [transforms.Resize(224), # takes an image or a tensor
+            transforms.ToDtype(torch.float32, scale=True), # converts raw pixels [0, 255] to floats bound between 0 and 1
             transforms.Normalize(_mean, _std)] # operates on a tensor of floats)
     _train_trans = [
             transforms.RandomHorizontalFlip(p=0.5), # image or tensor input
@@ -107,8 +135,26 @@ def transformations(_is_training: bool, _mean: list, _std: list):
     else: 
         _trans = _all_trans
 
-    logging.debug(f"the transformations are:\t\t\t\t\t{_trans}")
     return transforms.Compose(_trans)
+
+def make_dataset(_data_indices, _trans):
+    """
+    Make datasets to be passed to dataloader.   
+    returns type Dataset
+    Args: 
+        _data_indices: the indices belonging to a given dataset
+        _trans: The composed transformations
+    """
+    logger.debug(f"making the dataset with the following transformations: {_trans}")
+    _dataset = EuroSAT_dataset(_data_indices, _trans)
+    logger.debug(f"Number of records: \t{len(_dataset)}")
+    return _dataset
+
+def make_dataloader(_dataset: EuroSAT_dataset, _shuffle: bool):
+    _dataloader = DataLoader(_dataset, batch_size=cfg["values"].getint("batch_size"), shuffle=_shuffle)
+    logger.debug(f"DataLoader complete, length: {len(_dataloader)}")
+    return _dataloader
+
 
 if __name__ == "__main__":
     setup_logging()
@@ -126,34 +172,42 @@ if __name__ == "__main__":
     logger.debug(f"Randomly assign training, val, test indices")
     x_train, x_val, x_test = training_splits(data_indices)
 
-    logger.debug(f"create training transformations for ResNet")
     preprocess = ResNet18_Weights.IMAGENET1K_V1.transforms()
     rnet_mean, rnet_std = preprocess.mean, preprocess.std
-    trans = transformations(True, rnet_mean, rnet_std)
 
-    logger.debug("run transformations on image")
+    ## Training dataset
+    logger.debug(f"create training transformations for ResNet~~~~~~~~~~~~~~~~~~~~~~~~")
+    train_trans = transformations(_is_training=True, _mean=rnet_mean, _std=rnet_std)
+
+    # make training dataset and dataloader
+    ds_train = make_dataset(x_train, train_trans)
+    train_dataloader = make_dataloader(ds_train, True)
+
+    ## Validation dataset
+    logger.debug(f"\n\ncreate validation transformations for ResNet~~~~~~~~~~~~~~~~~~~~~~~~")
+    val_trans = transformations(_is_training=False, _mean=rnet_mean, _std=rnet_std)
+
+    # make validation dataset & data loader
+    ds_val = make_dataset(x_val, val_trans)
+    val_dataloader = make_dataloader(ds_val, True)
+
+    # Load Resnet18 Model
+    logger.debug(f"removing last layer of `ResNet18` model")
+    model18 = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
+    model18.fc = nn.Linear(model18.fc.in_features,10)
+
     
-    tst_img = ds.loader(ds.samples[3][0])
-    tst_out = trans(tst_img)
-    logger.debug(f"shape of output:\t\t\t\t\t\t\t{tst_out.shape}")
 
-    logging.debug(f"End process.\n\n")
+
+
+
+    ## Test dataset
+    logger.debug(f"\n\ncreate test transformations for ResNet~~~~~~~~~~~~~~~~~~~~~~~~")
+    test_trans = transformations(_is_training=False, _mean=rnet_mean, _std=rnet_std)
+
+    # make test dataset and dataloader
+    ds_val = make_dataset(x_test, test_trans)
+    val_dataloader = make_dataloader(ds_val, True)
+
+    logger.debug(f"End process.\n\n")
     
-
-
-# def load_dataset(root: str, train: bool = False):
-#     """Return the EuroSAT dataset, with train or eval transforms."""
-#     transform = _build_transform(train=train)
-#     return EuroSAT(root=root, transform=transform, download=False)
-
-
-# def _build_transform(train: bool):
-#     ...
-
-
-# def main(epochs: int, lr: float):
-#     ...
-
-
-# if __name__ == "__main__":
-#     main(epochs=5, lr=1e-4)

@@ -151,9 +151,48 @@ def make_dataset(_data_indices, _trans):
     return _dataset
 
 def make_dataloader(_dataset: EuroSAT_dataset, _shuffle: bool):
+    """
+    Create dataloader given a dataset
+    """
     _dataloader = DataLoader(_dataset, batch_size=cfg["values"].getint("batch_size"), shuffle=_shuffle)
     logger.debug(f"DataLoader complete, length: {len(_dataloader)}")
     return _dataloader
+
+def freeze_layers(_model, _freeze: bool):
+    """
+    Freeze or unfreeze mmodel layers (set requires_grad parameter to false for all model layers)
+    Args:
+        _freeze: True -> model will freeze; False -> model not frozen
+    """
+    # every layers weights are nn.parameter tensors
+    # each one has a requires_grad = False attribute
+    # loop over model.parameters() to freeze each layer
+
+    for p in _model.parameters():
+        p.requires_grad = not _freeze
+    
+    return _model
+
+def train_epoch(_model, _dataloader):
+    """
+    run training over one epoch to do:    
+        * forward pass
+        * loss
+        * backward pass
+        * update
+    """
+    _loss_fxn = nn.CrossEntropyLoss()
+    for _images, _labels in _dataloader:
+        # per batch in epoch
+        _logits = _model(_images)
+        logger.debug(f"successfully made logits with shape: {_logits.shape}")
+        
+        # loss fxn
+        _loss = _loss_fxn(_logits, _labels)
+
+        # backward pass
+
+        # update
 
 
 if __name__ == "__main__":
@@ -189,25 +228,36 @@ if __name__ == "__main__":
 
     # make validation dataset & data loader
     ds_val = make_dataset(x_val, val_trans)
-    val_dataloader = make_dataloader(ds_val, True)
+    val_dataloader = make_dataloader(_dataset=ds_val, _shuffle=False)
 
     # Load Resnet18 Model
     logger.debug(f"removing last layer of `ResNet18` model")
     model18 = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
-    model18.fc = nn.Linear(model18.fc.in_features,10)
 
-    
+    # freeze backbone by freezing entire model
+    frozen_model = freeze_layers(_model=model18, _freeze=True)
 
+    # replace final layer with 10 catorgies
+    frozen_model.fc = nn.Linear(model18.fc.in_features,10)
 
+    ## Training
+    # 3 epochs with frozen backbone
+    for epoch in range(3):
+        train_epoch(frozen_model, train_dataloader)
+            # train
 
+    # 5 epochs with unfrozen backbone
+    unfrozen_model = freeze_layers(_model=frozen_model, _freeze=False)
+    for epoch in range(5):
+            pass
 
     ## Test dataset
     logger.debug(f"\n\ncreate test transformations for ResNet~~~~~~~~~~~~~~~~~~~~~~~~")
     test_trans = transformations(_is_training=False, _mean=rnet_mean, _std=rnet_std)
 
     # make test dataset and dataloader
-    ds_val = make_dataset(x_test, test_trans)
-    val_dataloader = make_dataloader(ds_val, True)
+    ds_test = make_dataset(x_test, test_trans)
+    test_dataloader = make_dataloader(_dataset=ds_test, _shuffle=False)
 
     logger.debug(f"End process.\n\n")
     

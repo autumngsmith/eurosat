@@ -184,7 +184,7 @@ def make_dataloader(_dataset: EuroSAT_dataset, _shuffle: bool):
     """
     Create dataloader given a dataset
     """
-    _dataloader = DataLoader(_dataset, batch_size=cfg["values"].getint("batch_size"), shuffle=_shuffle)
+    _dataloader = DataLoader(_dataset, batch_size=cfg["values"].getint("batch_size"), shuffle=_shuffle, num_workers=4)
     logger.debug(f"DataLoader complete, length: {len(_dataloader)}")
     return _dataloader
 
@@ -203,7 +203,7 @@ def freeze_layers(_model, _freeze: bool):
     
     return _model
 
-def train_epoch(_model, _dataloader, _is_frozen):
+def train_epoch(_model, _dataloader, _optimizer):
     """
     run training over one epoch to do:    
         * forward pass
@@ -216,12 +216,9 @@ def train_epoch(_model, _dataloader, _is_frozen):
     _loss_fxn = nn.CrossEntropyLoss()
     _total_loss = 0
 
-    if _is_frozen:
-        _optimizer = torch.optim.Adam(_model.fc.parameters())
-    else:
-        _optimizer = torch.optim.Adam(_model.parameters(), lr=1e-4)
-
     for _images, _labels in _dataloader:
+
+        _images, _labels = _images.to('mps'), _labels.to('mps')
         # clears the gradients
         _optimizer.zero_grad()
 
@@ -257,6 +254,7 @@ def validate_eopch(_model, _dataloader, _return_preds: bool):
             _all_preds = []
             _all_labels = []
         for _images, _labels in _dataloader:
+            _images, _labels = _images.to('mps'), _labels.to('mps')
             _logits = _model(_images)
             _total_loss += _loss_fxn(_logits, _labels).item()    
             _preds = _logits.argmax(dim=1)
@@ -346,13 +344,13 @@ if __name__ == "__main__":
 
     # Load Resnet18 Model
     logger.debug(f"removing last layer of `ResNet18` model")
-    model18 = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
+    model18 = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1).to('mps')
 
     # freeze backbone by freezing entire model
     frozen_model = freeze_layers(_model=model18, _freeze=True)
 
     # replace final layer with 10 catorgies
-    frozen_model.fc = nn.Linear(model18.fc.in_features,10)
+    frozen_model.fc = nn.Linear(model18.fc.in_features,10).to('mps')
 
     ## Debug Training
     logger.debug(f"begin training process")
@@ -361,9 +359,11 @@ if __name__ == "__main__":
 
     results = {}
     best_val_accuracy = 0
+    
+    optimizer = torch.optim.Adam(frozen_model.fc.parameters())
     for epoch in range(3):
         logger.info(f"frozen; started epoch:\t{epoch+1}")
-        train_avg_loss = train_epoch(_model=frozen_model, _dataloader=train_dataloader, _is_frozen=True)
+        train_avg_loss = train_epoch(_model=frozen_model, _dataloader=train_dataloader, _optimizer=optimizer)
         logger.debug(f"finished training epoch:\t{epoch+1}")
         pct_accuracy, val_avg_loss = validate_eopch(_model=frozen_model, _dataloader=val_dataloader, _return_preds=False)
         if pct_accuracy > best_val_accuracy:
@@ -373,9 +373,11 @@ if __name__ == "__main__":
 
     # 5 epochs with unfrozen backbone
     unfrozen_model = freeze_layers(_model=frozen_model, _freeze=False)
+
+    optimizer = torch.optim.Adam(unfrozen_model.parameters(), lr=1e-4)
     for epoch in range(5):
         logger.info(f"unfrozen; started epoch:\t{epoch+1}")
-        train_avg_loss = train_epoch(_model=unfrozen_model, _dataloader=train_dataloader, _is_frozen=False)
+        train_avg_loss = train_epoch(_model=unfrozen_model, _dataloader=train_dataloader, _optimizer=optimizer)
         logger.debug(f"finished training epoch:\t{epoch+1}")
         pct_accuracy, val_avg_loss = validate_eopch(_model=unfrozen_model, _dataloader=val_dataloader, _return_preds=False)
         if pct_accuracy > best_val_accuracy:

@@ -1,12 +1,12 @@
 # Fine tune a CNN on Eurosat
 
-## Model (~1 hour)
+#### training loop
 
-- [x] Load `resnet18` with pretrained weights.
-- [x] Replace the final FC layer with a 10-class output.
-- [x] Freeze the backbone, train only the head, ~3 epochs. Establish a baseline.
-- [ ] Unfreeze and fine-tune the whole network at a lower LR (~1e-4), ~5 epochs.
-- [ ] Adam, cross-entropy loss.
+- [x] **Write the loop by hand.** No Lightning, no wrapper. `zero_grad` → forward → loss → `backward` → `step`.
+- [ ] Validation pass each epoch with `model.eval()` and `torch.no_grad()`.
+- [ ] Print train loss, val loss, val accuracy per epoch.
+- [ ] Save the best checkpoint by val accuracy.
+- [ ] Plot train vs. val loss curves. Confirm you can tell overfitting from underfitting by looking at them.
 
 #### Claude setup
  - [ ] Hooks: claude can read the raw data file, but may not write to that file
@@ -38,3 +38,11 @@
     - [x] random horizontal + vertical flip on train only
         - Vertical flip is fine here in a way it isn't for natural images — overhead imagery has no canonical "up." Worth knowing why.
 - [x] `DataLoader` for each split. Batch size 32, `shuffle=True` on train only.
+
+## Model (~1 hour)
+
+- [x] Load `resnet18` with pretrained weights.
+- [x] Replace the final FC layer with a 10-class output.
+- [x] Freeze the backbone, train only the head, ~3 epochs. Establish a baseline.
+- [x] Unfreeze and fine-tune the whole network at a lower LR (~1e-4), ~5 epochs.
+- [x] Adam, cross-entropy loss.

@@ -95,7 +95,7 @@ def map_strata(_ds: EuroSAT):
 
 def training_splits(_df: pd.DataFrame):
 
-    x_train, val_test = train_test_split(
+    _x_train, _val_test = train_test_split(
         _df, 
         test_size=0.3, 
         stratify=_df['strata_id'], 
@@ -103,15 +103,30 @@ def training_splits(_df: pd.DataFrame):
         )
     logger.debug("x_train and val_test created, creating x_val and x_test")
 
-    x_val, x_test = val_test = train_test_split(
-        val_test, 
+    _x_val, _x_test = train_test_split(
+        _val_test, 
         test_size=0.5, 
-        stratify=val_test['strata_id'], 
+        stratify=_val_test['strata_id'], 
         random_state=seed
         )
-    logger.debug(f"The shape of \tx_train: {x_train.shape}\n\t\t\t\t\t\t\t\t\t\tx_val:   {x_val.shape}\n\t\t\t\t\t\t\t\t\t\t\t\tx_test:  {x_test.shape}")
+    logger.debug(f"The shape of \tx_train: {_x_train.shape}\n\t\t\t\t\t\t\t\t\t\tx_val:   {_x_val.shape}\n\t\t\t\t\t\t\t\t\t\t\t\tx_test:  {_x_test.shape}")
 
-    return x_train, x_val, x_test
+    return _x_train, _x_val, _x_test
+
+def code_debug_sample(_df: pd.DataFrame):
+    """
+    makes a dataset for sake of debugging rather than always running a full training size dataset while building code
+    """
+
+    _x_sample = train_test_split(
+        _df, 
+        test_size=0.99, 
+        stratify=_df['strata_id'], 
+        random_state=seed
+        )
+
+    return _x_sample
+    
 
 def transformations(_is_training: bool, _mean: list, _std: list):
     """Create a transformation object
@@ -173,7 +188,7 @@ def freeze_layers(_model, _freeze: bool):
     
     return _model
 
-def train_epoch(_model, _dataloader):
+def train_epoch(_model, _dataloader, _is_frozen):
     """
     run training over one epoch to do:    
         * forward pass
@@ -182,17 +197,27 @@ def train_epoch(_model, _dataloader):
         * update
     """
     _loss_fxn = nn.CrossEntropyLoss()
+
+    if _is_frozen:
+        _optimizer = torch.optim.Adam(_model.fc.parameters())
+    else:
+        _optimizer = torch.optim.Adam(_model.parameters(), lr=1e-4)
+
     for _images, _labels in _dataloader:
+        # clears the gradients
+        _optimizer.zero_grad()
+
         # per batch in epoch
         _logits = _model(_images)
-        logger.debug(f"successfully made logits with shape: {_logits.shape}")
         
         # loss fxn
         _loss = _loss_fxn(_logits, _labels)
 
         # backward pass
+        _loss.backward()
 
         # update
+        _optimizer.step()
 
 
 if __name__ == "__main__":
@@ -211,8 +236,19 @@ if __name__ == "__main__":
     logger.debug(f"Randomly assign training, val, test indices")
     x_train, x_val, x_test = training_splits(data_indices)
 
+    # debug dataset
+    x_debug, x_debug_test = code_debug_sample(data_indices)
+
     preprocess = ResNet18_Weights.IMAGENET1K_V1.transforms()
     rnet_mean, rnet_std = preprocess.mean, preprocess.std
+
+    ## code debuging dataset
+    logger.debug(f"create code debug transformations for ResNet~~~~~~~~~~~~~~~~~~~~~~~~")
+    debug_trans = transformations(_is_training=True, _mean=rnet_mean, _std=rnet_std)
+
+    # make code debugging dataset and dataloader
+    ds_debug = make_dataset(x_debug, debug_trans)
+    debug_dataloader = make_dataloader(ds_debug, True)
 
     ## Training dataset
     logger.debug(f"create training transformations for ResNet~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -240,24 +276,30 @@ if __name__ == "__main__":
     # replace final layer with 10 catorgies
     frozen_model.fc = nn.Linear(model18.fc.in_features,10)
 
-    ## Training
+    ## Debug Training
+    logger.debug(f"begin training process")
     # 3 epochs with frozen backbone
+    logger.info(f"num records being processed in training loop: {len(x_debug)}")
+
     for epoch in range(3):
-        train_epoch(frozen_model, train_dataloader)
-            # train
+        logger.debug(f"frozen; started epoch:\t{epoch+1}")
+        train_epoch(_model=frozen_model, _dataloader=debug_dataloader, _is_frozen=True)
+        logger.debug(f"finished training epoch:\t{epoch+1}")
 
     # 5 epochs with unfrozen backbone
     unfrozen_model = freeze_layers(_model=frozen_model, _freeze=False)
     for epoch in range(5):
-            pass
+        logger.debug(f"unfrozen; started epoch:\t{epoch+1}")
+        train_epoch(_model=unfrozen_model, _dataloader=debug_dataloader, _is_frozen=False)
+        logger.debug(f"finished training epoch:\t{epoch+1}")
 
-    ## Test dataset
-    logger.debug(f"\n\ncreate test transformations for ResNet~~~~~~~~~~~~~~~~~~~~~~~~")
-    test_trans = transformations(_is_training=False, _mean=rnet_mean, _std=rnet_std)
+    # ## Test dataset
+    # logger.debug(f"\n\ncreate test transformations for ResNet~~~~~~~~~~~~~~~~~~~~~~~~")
+    # test_trans = transformations(_is_training=False, _mean=rnet_mean, _std=rnet_std)
 
-    # make test dataset and dataloader
-    ds_test = make_dataset(x_test, test_trans)
-    test_dataloader = make_dataloader(_dataset=ds_test, _shuffle=False)
+    # # make test dataset and dataloader
+    # ds_test = make_dataset(x_test, test_trans)
+    # test_dataloader = make_dataloader(_dataset=ds_test, _shuffle=False)
 
     logger.debug(f"End process.\n\n")
     

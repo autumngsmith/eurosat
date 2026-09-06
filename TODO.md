@@ -1,12 +1,14 @@
 # Fine tune a CNN on Eurosat
 
-#### training loop
+#### evaluation
 
-- [x] **Write the loop by hand.** No Lightning, no wrapper. `zero_grad` → forward → loss → `backward` → `step`.
-- [ ] Validation pass each epoch with `model.eval()` and `torch.no_grad()`.
-- [ ] Print train loss, val loss, val accuracy per epoch.
-- [ ] Save the best checkpoint by val accuracy.
-- [ ] Plot train vs. val loss curves. Confirm you can tell overfitting from underfitting by looking at them.
+- [ ] Test-set accuracy — but do not stop here.
+- [ ] **Confusion matrix.** Which classes get confused? Expect trouble between spectrally similar classes.
+- [ ] Per-class precision/recall (`classification_report`).
+- [ ] Pull 6–8 misclassified images and actually look at them. Write down what you think went wrong.
+- [ ] Compare frozen-backbone vs. full fine-tune numbers. State how much transfer learning bought you.
+
+
 
 #### Claude setup
  - [ ] Hooks: claude can read the raw data file, but may not write to that file
@@ -46,3 +48,11 @@
 - [x] Freeze the backbone, train only the head, ~3 epochs. Establish a baseline.
 - [x] Unfreeze and fine-tune the whole network at a lower LR (~1e-4), ~5 epochs.
 - [x] Adam, cross-entropy loss.
+
+#### training loop
+
+- [x] **Write the loop by hand.** No Lightning, no wrapper. `zero_grad` → forward → loss → `backward` → `step`.
+- [x] Validation pass each epoch with `model.eval()` and `torch.no_grad()`.
+- [x] Print train loss, val loss, val accuracy per epoch.
+- [x] Save the best checkpoint by val accuracy.
+- [x] Plot train vs. val loss curves. Confirm you can tell overfitting from underfitting by looking at them.

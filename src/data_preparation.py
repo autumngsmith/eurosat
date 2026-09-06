@@ -38,6 +38,7 @@ def setup_logging(level=logging.DEBUG, logfile=ROOT / "logs" / "train.log"):
         datefmt="%Y-%m-%d %H:%M:%S",
         force=True,
     )
+    logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
 # Classes
 
@@ -142,7 +143,6 @@ def code_debug_sample(_df: pd.DataFrame):
 
     return _x_train, _x_val, _x_test 
     
-
 def transformations(_is_training: bool, _mean: list, _std: list):
     """Create a transformation object
 
@@ -210,8 +210,11 @@ def train_epoch(_model, _dataloader, _is_frozen):
         * loss
         * backward pass
         * update
+
+    returns avg loss
     """
     _loss_fxn = nn.CrossEntropyLoss()
+    _total_loss = 0
 
     if _is_frozen:
         _optimizer = torch.optim.Adam(_model.fc.parameters())
@@ -227,6 +230,7 @@ def train_epoch(_model, _dataloader, _is_frozen):
         
         # loss fxn
         _loss = _loss_fxn(_logits, _labels)
+        _total_loss += _loss.item()  
 
         # backward pass
         _loss.backward()
@@ -234,12 +238,13 @@ def train_epoch(_model, _dataloader, _is_frozen):
         # update
         _optimizer.step()
 
+    _avg_loss = _total_loss / len(_dataloader)
+    return _avg_loss
+
 def validate_eopch(_model, _dataloader):
     """
-    Validate the training results from an epoch
-    Returns: 
-        - pct accuracy
-        - avg loss
+    Validate the training results from an epoch.    
+    Returns pct accuracy, avg loss
     """
     _loss_fxn = nn.CrossEntropyLoss()
     _model.eval() # enter evaluation mode 
@@ -261,6 +266,28 @@ def validate_eopch(_model, _dataloader):
     _model.train() # exit evaluation mode
 
     return _pct_accuracy, _avg_loss
+
+def plot_loss_curves(_results: dict):
+    """
+    Plot train vs val loss across every epoch in `_results`.
+    `_results` values are expected as (pct_accuracy, train_avg_loss, val_avg_loss) tuples.
+    """
+    _train_losses = [v[1] for v in _results.values()]
+    _val_losses = [v[2] for v in _results.values()]
+    _epochs = range(1, len(_results) + 1)
+
+    plt.figure()
+    plt.plot(_epochs, _train_losses, label="train loss")
+    plt.plot(_epochs, _val_losses, label="val loss")
+    plt.xlabel("epoch")
+    plt.ylabel("loss")
+    plt.title("Train vs Validation Loss")
+    plt.legend()
+
+    _out_path = ROOT / "logs" / "loss_curves.png"
+    plt.savefig(_out_path)
+    plt.close()
+    logger.info(f"loss curve plot saved to: {_out_path}")
 
 if __name__ == "__main__":
     setup_logging()
@@ -320,21 +347,30 @@ if __name__ == "__main__":
     logger.info(f"num records being processed in training loop: {len(x_train)}")
 
     results = {}
+    best_val_accuracy = 0
     for epoch in range(3):
         logger.debug(f"frozen; started epoch:\t{epoch+1}")
-        train_epoch(_model=frozen_model, _dataloader=train_dataloader, _is_frozen=True)
+        train_avg_loss = train_epoch(_model=frozen_model, _dataloader=train_dataloader, _is_frozen=True)
         logger.debug(f"finished training epoch:\t{epoch+1}")
-        pct_accuracy, avg_loss = validate_eopch(_model=frozen_model, _dataloader=val_dataloader)
-        results[f"frozen epoch {epoch+1}"] = (pct_accuracy, avg_loss)
+        pct_accuracy, val_avg_loss = validate_eopch(_model=frozen_model, _dataloader=val_dataloader)
+        if pct_accuracy > best_val_accuracy:
+            best_val_accuracy = pct_accuracy
+            torch.save(frozen_model.state_dict(), "best_model.pt")
+        results[f"frozen epoch {epoch+1} (pct ac, train avg loss, val avg loss)"] = (pct_accuracy, train_avg_loss, val_avg_loss)
 
     # 5 epochs with unfrozen backbone
     unfrozen_model = freeze_layers(_model=frozen_model, _freeze=False)
     for epoch in range(5):
         logger.debug(f"unfrozen; started epoch:\t{epoch+1}")
-        train_epoch(_model=unfrozen_model, _dataloader=train_dataloader, _is_frozen=False)
+        train_avg_loss = train_epoch(_model=unfrozen_model, _dataloader=train_dataloader, _is_frozen=False)
         logger.debug(f"finished training epoch:\t{epoch+1}")
-        pct_accuracy, avg_loss = validate_eopch(_model=unfrozen_model, _dataloader=val_dataloader)
-        results[f"unfrozen epoch {epoch+1}"] = (pct_accuracy, avg_loss)
+        pct_accuracy, val_avg_loss = validate_eopch(_model=unfrozen_model, _dataloader=val_dataloader)
+        if pct_accuracy > best_val_accuracy:
+            best_val_accuracy = pct_accuracy
+            torch.save(unfrozen_model.state_dict(), "best_model.pt")
+        results[f"unfrozen epoch {epoch+1} (pct ac, train avg loss, val avg loss)"] = (pct_accuracy, train_avg_loss, val_avg_loss)
+
+    plot_loss_curves(results)
 
     # ## Test dataset
     # logger.debug(f"\n\ncreate test transformations for ResNet~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -343,6 +379,8 @@ if __name__ == "__main__":
     # # make test dataset and dataloader
     # ds_test = make_dataset(x_test, test_trans)
     # test_dataloader = make_dataloader(_dataset=ds_test, _shuffle=False)
+
+    plot_loss_curves(results)
 
     logger.debug(f"End process.\n\n")
     

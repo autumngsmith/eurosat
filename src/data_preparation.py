@@ -3,11 +3,11 @@
 from torchvision.datasets import EuroSAT
 from torchvision.transforms import v2 as transforms
 import matplotlib.pyplot as plt
-import random
 import os
 import pandas as pd 
 import numpy as np
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
 import configparser
 from pathlib import Path
 import logging
@@ -241,7 +241,7 @@ def train_epoch(_model, _dataloader, _is_frozen):
     _avg_loss = _total_loss / len(_dataloader)
     return _avg_loss
 
-def validate_eopch(_model, _dataloader):
+def validate_eopch(_model, _dataloader, _return_preds: bool):
     """
     Validate the training results from an epoch.    
     Returns pct accuracy, avg loss
@@ -252,11 +252,19 @@ def validate_eopch(_model, _dataloader):
     with torch.no_grad():
         _num_correct = 0
         _total_loss = 0
+
+        if _return_preds:
+            _all_preds = []
+            _all_labels = []
         for _images, _labels in _dataloader:
             _logits = _model(_images)
             _total_loss += _loss_fxn(_logits, _labels).item()    
             _preds = _logits.argmax(dim=1)
             _num_correct += (_preds == _labels).sum().item() # .item() helps return a number and not a tensor
+
+            if _return_preds:
+                _all_preds.append(_preds)
+                _all_labels.append(_labels)
 
         _pct_accuracy = _num_correct / len(_dataloader.dataset)
         _avg_loss = _total_loss / len(_dataloader)
@@ -265,7 +273,12 @@ def validate_eopch(_model, _dataloader):
 
     _model.train() # exit evaluation mode
 
-    return _pct_accuracy, _avg_loss
+    if _return_preds:
+        _all_preds = torch.cat(_all_preds)
+        _all_labels = torch.cat(_all_labels)
+        return _pct_accuracy, _avg_loss, _all_preds, _all_labels
+    else: 
+        return _pct_accuracy, _avg_loss
 
 def plot_loss_curves(_results: dict):
     """
@@ -349,10 +362,10 @@ if __name__ == "__main__":
     results = {}
     best_val_accuracy = 0
     for epoch in range(3):
-        logger.debug(f"frozen; started epoch:\t{epoch+1}")
+        logger.info(f"frozen; started epoch:\t{epoch+1}")
         train_avg_loss = train_epoch(_model=frozen_model, _dataloader=train_dataloader, _is_frozen=True)
         logger.debug(f"finished training epoch:\t{epoch+1}")
-        pct_accuracy, val_avg_loss = validate_eopch(_model=frozen_model, _dataloader=val_dataloader)
+        pct_accuracy, val_avg_loss = validate_eopch(_model=frozen_model, _dataloader=val_dataloader, _return_preds=False)
         if pct_accuracy > best_val_accuracy:
             best_val_accuracy = pct_accuracy
             torch.save(frozen_model.state_dict(), "best_model.pt")
@@ -361,10 +374,10 @@ if __name__ == "__main__":
     # 5 epochs with unfrozen backbone
     unfrozen_model = freeze_layers(_model=frozen_model, _freeze=False)
     for epoch in range(5):
-        logger.debug(f"unfrozen; started epoch:\t{epoch+1}")
+        logger.info(f"unfrozen; started epoch:\t{epoch+1}")
         train_avg_loss = train_epoch(_model=unfrozen_model, _dataloader=train_dataloader, _is_frozen=False)
         logger.debug(f"finished training epoch:\t{epoch+1}")
-        pct_accuracy, val_avg_loss = validate_eopch(_model=unfrozen_model, _dataloader=val_dataloader)
+        pct_accuracy, val_avg_loss = validate_eopch(_model=unfrozen_model, _dataloader=val_dataloader, _return_preds=False)
         if pct_accuracy > best_val_accuracy:
             best_val_accuracy = pct_accuracy
             torch.save(unfrozen_model.state_dict(), "best_model.pt")
@@ -372,15 +385,26 @@ if __name__ == "__main__":
 
     plot_loss_curves(results)
 
-    # ## Test dataset
-    # logger.debug(f"\n\ncreate test transformations for ResNet~~~~~~~~~~~~~~~~~~~~~~~~")
-    # test_trans = transformations(_is_training=False, _mean=rnet_mean, _std=rnet_std)
+    ## Test dataset
+    logger.debug(f"\n\ncreate test transformations for ResNet~~~~~~~~~~~~~~~~~~~~~~~~")
+    test_trans = transformations(_is_training=False, _mean=rnet_mean, _std=rnet_std)
 
-    # # make test dataset and dataloader
-    # ds_test = make_dataset(x_test, test_trans)
-    # test_dataloader = make_dataloader(_dataset=ds_test, _shuffle=False)
+    # make test dataset and dataloader
+    ds_test = make_dataset(x_test, test_trans)
+    test_dataloader = make_dataloader(_dataset=ds_test, _shuffle=False)
 
-    plot_loss_curves(results)
+    # load best model
+    unfrozen_model.load_state_dict(torch.load("best_model.pt"))
+    test_pct_accuracy, test_avg_loss, test_predictions, test_labels = validate_eopch(_model=unfrozen_model, _dataloader=test_dataloader, _return_preds=True)
+    logger.info(f"test accuracy: {round(test_pct_accuracy, 2)}")
+    logger.info(f"test avg loss: {round(test_avg_loss, 2)}")
+
+    c_matrix = confusion_matrix(test_labels.cpu().numpy(), test_predictions.cpu().numpy())
+    ConfusionMatrixDisplay(confusion_matrix=c_matrix).plot()
+    plt.savefig(ROOT / "logs" / "confusion_matrix.png")
+    plt.close()
+
+    logger.info(f"\n{classification_report(test_labels.cpu().numpy(), test_predictions.cpu().numpy(), target_names=ds.classes)}")
 
     logger.debug(f"End process.\n\n")
     

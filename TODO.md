@@ -2,13 +2,11 @@
 
 #### evaluation
 
-- [ ] Test-set accuracy — but do not stop here.
-- [ ] **Confusion matrix.** Which classes get confused? Expect trouble between spectrally similar classes.
-- [ ] Per-class precision/recall (`classification_report`).
+- [x] Test-set accuracy — but do not stop here.
+- [x] **Confusion matrix.** Which classes get confused? Expect trouble between spectrally similar classes.
+- [x] Per-class precision/recall (`classification_report`).
 - [ ] Pull 6–8 misclassified images and actually look at them. Write down what you think went wrong.
 - [ ] Compare frozen-backbone vs. full fine-tune numbers. State how much transfer learning bought you.
-
-
 
 #### Claude setup
  - [ ] Hooks: claude can read the raw data file, but may not write to that file

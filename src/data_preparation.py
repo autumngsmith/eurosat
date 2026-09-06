@@ -118,14 +118,29 @@ def code_debug_sample(_df: pd.DataFrame):
     makes a dataset for sake of debugging rather than always running a full training size dataset while building code
     """
 
-    _x_sample = train_test_split(
+    _x_train, remainder_1 = train_test_split(
         _df, 
-        test_size=0.99, 
+        test_size=0.98, 
         stratify=_df['strata_id'], 
         random_state=seed
         )
 
-    return _x_sample
+    _x_val, remainder_2 = train_test_split(
+        remainder_1, 
+        test_size=0.99, 
+        stratify=remainder_1['strata_id'], 
+        random_state=seed
+        )
+
+    _x_test, remainder_3 = train_test_split(
+            remainder_2, 
+            test_size=0.99, 
+            stratify=remainder_2['strata_id'], 
+            random_state=seed
+            )
+ 
+
+    return _x_train, _x_val, _x_test 
     
 
 def transformations(_is_training: bool, _mean: list, _std: list):
@@ -219,6 +234,33 @@ def train_epoch(_model, _dataloader, _is_frozen):
         # update
         _optimizer.step()
 
+def validate_eopch(_model, _dataloader):
+    """
+    Validate the training results from an epoch
+    Returns: 
+        - pct accuracy
+        - avg loss
+    """
+    _loss_fxn = nn.CrossEntropyLoss()
+    _model.eval() # enter evaluation mode 
+
+    with torch.no_grad():
+        _num_correct = 0
+        _total_loss = 0
+        for _images, _labels in _dataloader:
+            _logits = _model(_images)
+            _total_loss += _loss_fxn(_logits, _labels).item()    
+            _preds = _logits.argmax(dim=1)
+            _num_correct += (_preds == _labels).sum().item() # .item() helps return a number and not a tensor
+
+        _pct_accuracy = _num_correct / len(_dataloader.dataset)
+        _avg_loss = _total_loss / len(_dataloader)
+        logger.info(f"\taccuracy of epoch: {round(_pct_accuracy, 2)}")
+        logger.info(f"\tavg loss of epoch: {round(_avg_loss, 2)}")
+
+    _model.train() # exit evaluation mode
+
+    return _pct_accuracy, _avg_loss
 
 if __name__ == "__main__":
     setup_logging()
@@ -226,6 +268,7 @@ if __name__ == "__main__":
     logger.debug(f"The root dir for this script is:\t{ROOT}")
 
     seed = cfg["values"].getint("rseed")
+    mode = cfg["modes"]["mode"]
 
     logger.debug("Beginning data load.")
     ds = load_data(cfg['paths']['dir'])
@@ -233,22 +276,17 @@ if __name__ == "__main__":
     logger.debug("Mapping strata labels to file paths")
     data_indices = map_strata(ds)
 
-    logger.debug(f"Randomly assign training, val, test indices")
-    x_train, x_val, x_test = training_splits(data_indices)
-
-    # debug dataset
-    x_debug, x_debug_test = code_debug_sample(data_indices)
-
     preprocess = ResNet18_Weights.IMAGENET1K_V1.transforms()
     rnet_mean, rnet_std = preprocess.mean, preprocess.std
 
-    ## code debuging dataset
-    logger.debug(f"create code debug transformations for ResNet~~~~~~~~~~~~~~~~~~~~~~~~")
-    debug_trans = transformations(_is_training=True, _mean=rnet_mean, _std=rnet_std)
+    logger.debug(f"mode: {mode} Randomly assign training, val, test indices")
 
-    # make code debugging dataset and dataloader
-    ds_debug = make_dataset(x_debug, debug_trans)
-    debug_dataloader = make_dataloader(ds_debug, True)
+    if mode == 'debug':
+        # debug datasets
+        x_train, x_val, x_test = code_debug_sample(data_indices)
+
+    else: 
+        x_train, x_val, x_test = training_splits(data_indices)
 
     ## Training dataset
     logger.debug(f"create training transformations for ResNet~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -279,19 +317,24 @@ if __name__ == "__main__":
     ## Debug Training
     logger.debug(f"begin training process")
     # 3 epochs with frozen backbone
-    logger.info(f"num records being processed in training loop: {len(x_debug)}")
+    logger.info(f"num records being processed in training loop: {len(x_train)}")
 
+    results = {}
     for epoch in range(3):
         logger.debug(f"frozen; started epoch:\t{epoch+1}")
-        train_epoch(_model=frozen_model, _dataloader=debug_dataloader, _is_frozen=True)
+        train_epoch(_model=frozen_model, _dataloader=train_dataloader, _is_frozen=True)
         logger.debug(f"finished training epoch:\t{epoch+1}")
+        pct_accuracy, avg_loss = validate_eopch(_model=frozen_model, _dataloader=val_dataloader)
+        results[f"frozen epoch {epoch+1}"] = (pct_accuracy, avg_loss)
 
     # 5 epochs with unfrozen backbone
     unfrozen_model = freeze_layers(_model=frozen_model, _freeze=False)
     for epoch in range(5):
         logger.debug(f"unfrozen; started epoch:\t{epoch+1}")
-        train_epoch(_model=unfrozen_model, _dataloader=debug_dataloader, _is_frozen=False)
+        train_epoch(_model=unfrozen_model, _dataloader=train_dataloader, _is_frozen=False)
         logger.debug(f"finished training epoch:\t{epoch+1}")
+        pct_accuracy, avg_loss = validate_eopch(_model=unfrozen_model, _dataloader=val_dataloader)
+        results[f"unfrozen epoch {epoch+1}"] = (pct_accuracy, avg_loss)
 
     # ## Test dataset
     # logger.debug(f"\n\ncreate test transformations for ResNet~~~~~~~~~~~~~~~~~~~~~~~~")

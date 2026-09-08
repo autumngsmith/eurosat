@@ -1,7 +1,13 @@
-# A sample config file, remove this line before using
+# A sample config file, remove this line before using and remove the .txt suffix
 
 [paths]
-
 dir = /Users/.../your/dir
 data = data/eurosat/2750 
+
+[values]
 rseed = 42
+batch_size = 32
+
+[modes]
+mode = prod
+# options: debug, prod

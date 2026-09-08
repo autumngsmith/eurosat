@@ -2,7 +2,7 @@
 An implementation of a deep learning approach for land use classification from satellite imagery, aiming to reproduce the standard transfer-learning approach while building a foundation for further sensor modeling work. Built on a PyTorch ResNet18 backbone and trained on the EuroSAT Sentinel-2 dataset. The training pipeline was implemented independently to gain a deeper working understanding of the full workflow.
 
 # Dataset
-I used the **EuroSAT Sentinel-2 dataset**[^1][^2] of satelite images. 
+I used the **EuroSAT Sentinel-2 dataset**[^1][^2] of satellite images. 
 * 27,000 images 
 * 10 classes
 * RGB subset
@@ -13,23 +13,46 @@ I used the **EuroSAT Sentinel-2 dataset**[^1][^2] of satelite images.
 
 ## Data cleaning
 
+I did the following cleaning items
+
 * resize all images to 224 x 224
+    * ResNet18 expects all images to be 224 x 224
 * randomly flip images vertically and horizontally
-* normalized images -- standardized to ResNet18's RGB center and spread as defined by ImageNet. Using the center and spread expected by ResNet18 allows the model to reap the benefit of using pretrained weights. 
+    * Done to increase variety in the training sample.
+* normalized images
+    * standardized to ResNet18's RGB center and spread as defined by ImageNet. Using the center and spread expected by ResNet18 allows the model to reap the benefit of using pretrained weights. 
 * 70/15/15 split for training, validation, testing
 
 ## Training
 
+I used a transfer learning approach of 'freezing and fine tuning' a pre-existing model[^3].
+
 * 8 epochs
-    * first 3 frozen backbone - just trained the new 10 classes, did not update the ResNet18 model
-    * last 5 unfrozen backbone - update the entire model 
+    * Freezing section: 3 epochs with a frozen backbone
+        * just trained the new 10 classes
+        * did not update the ResNet18 model
+    * Fine tuning section: last 5 unfrozen backbone
 
 # Results
 
 * Test accuracy: 97.63% - within the range of the published benchmark for the EuroSAT dataset
 * Test loss: 0.07
 
-# Next steps
+![Confusion Matrix](results/confusion_matrix.png)   
+
+As we can see, the recall for `residential` plots was fantastic; all true `residential` images were accurately identified. Very few true `Industrial` images were incorrectly classified as `residential`. 
+
+Meanwhile, `Permanent Crop` was only correctly classified 95% of the time. Further work would involve investigating why. 
+ 
+![Loss Curves](results/loss_curves.png)    
+
+I do not see evidence here of overfitting; if the validation (orange) line rose while the training (blue) line stayed low, then I would be worried about overfitting.
+
+What I _do_ see is clear motivation and benefit of using the freeze and tune approach. The frozen model, at best, still had a loss of approximately 0.23. Once the model was unfrozen and allowed to fine tune, the loss dropped below 0.1.
+
+# Next Steps
+
+Currently, this project only considers RGB and does not take advantage of all the bands that Sentinel-2 has to offer. I would like to further improve the model by considering all 13 bands, rather than staying limited to 3. 
 
 # Code
 
@@ -38,19 +61,17 @@ I used the **EuroSAT Sentinel-2 dataset**[^1][^2] of satelite images.
 ``` bash
 eurosat/
 ├── README.md
-├── requirements.txt
 ├── .gitignore
 ├── src/
-│   ├── data_preparation.py       split + transforms + dataloaders
-│   ├── model.py      resnet18 setup
-│   └── train.py      the training loop
+│   ├── data_preparation.py       data transformation, model building, validation
+│   └── evaluate.py               produce evaluation artifacts
 ├── notebooks/
 └── data/             gitignored 
 ```
 
 ## AI Use
 
-Claude was used in this project to help answer questions and organize my thoughts so that I could focus on my learning goals. Claude was **not** used to write any code[^*]. 
+Claude was used in this project to help answer questions, organize my thoughts, and write my todo list so that I could focus on my learning goals. Claude was **not** used to write any training code. Claude did help with building the final plots so that I could focus on interpretation rather than visualization. 
 
 I prioritized understanding the implementation of a transfer learning approach over wrangling new syntax. I took notes as I learned, and used Claude to verify my notes for accuracy, for example:
 
@@ -77,7 +98,7 @@ are my notes accurate
     * only updates the final layer (the 10 strata we care about)
 ```
 
-Response: 
+AI Response: 
 
 ``` text
 Mostly accurate, a few corrections:
@@ -93,11 +114,12 @@ Update: "optimizer.step() to record the ??" — it doesn't record anything; it a
 Also: "only updates the final layer" is true right now, specifically because the backbone is frozen — it's not a general fact about optimizer.step(). Once you unfreeze in the second phase, the same optimizer.step() call would update the whole network, assuming the optimizer is told about those newly-unfrozen parameters.
 ```
 
-[*^]: The singular code exception is that claude wrote the method `plot_loss_curves()`; for this modeling exercise I cared about understanding transfer learning and chose to outsource that one graph. 
-
 # Sources
 
 [^1]: Eurosat: A novel dataset and deep learning benchmark for land use and land cover classification. Patrick Helber, Benjamin Bischke, Andreas Dengel, Damian Borth. IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing, 2019.
 
 [^2]: Introducing EuroSAT: A Novel Dataset and Deep Learning Benchmark for Land Use and Land Cover Classification. Patrick Helber, Benjamin Bischke, Andreas Dengel. 2018 IEEE International Geoscience and Remote Sensing Symposium, 2018.
+
+
+[^3]: https://docs.pytorch.org/tutorials/beginner/transfer_learning_tutorial.html
 

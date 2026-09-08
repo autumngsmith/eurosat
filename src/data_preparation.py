@@ -278,10 +278,14 @@ def validate_eopch(_model, _dataloader, _return_preds: bool):
     else: 
         return _pct_accuracy, _avg_loss
 
-def plot_loss_curves(_results: dict):
+def plot_loss_curves(_results: dict, _freeze_epoch: int = None, _highlight_epochs: list = None):
     """
     Plot train vs val loss across every epoch in `_results`.
     `_results` values are expected as (pct_accuracy, train_avg_loss, val_avg_loss) tuples.
+    `_freeze_epoch`, if given, draws a vertical dashed line marking the last frozen-backbone
+    epoch. Both `_freeze_epoch` and any epochs in `_highlight_epochs` get their train/val
+    loss labeled as a single combined annotation per epoch, to avoid the two values'
+    text overlapping when they're numerically close together (e.g. late in fine-tuning).
     """
     _train_losses = [v[1] for v in _results.values()]
     _val_losses = [v[2] for v in _results.values()]
@@ -293,9 +297,30 @@ def plot_loss_curves(_results: dict):
     plt.xlabel("epoch")
     plt.ylabel("loss")
     plt.title("Train vs Validation Loss")
+
+    if _freeze_epoch is not None:
+        plt.axvline(x=_freeze_epoch, color="lightgrey", linestyle="--")
+
+    _label_epochs = set(_highlight_epochs or [])
+    if _freeze_epoch is not None:
+        _label_epochs.add(_freeze_epoch)
+
+    for _epoch in _label_epochs:
+        _train_val = _train_losses[_epoch - 1]
+        _val_val = _val_losses[_epoch - 1]
+        _top = max(_train_val, _val_val)
+        plt.annotate(
+            f"epoch {_epoch}\ntrain {_train_val:.2f}\nval {_val_val:.2f}",
+            (_epoch, _top),
+            textcoords="offset points", xytext=(6, 10),
+            fontsize=8,
+        )
+
     plt.legend()
 
-    _out_path = ROOT / "logs" / "loss_curves.png"
+    _results_dir = ROOT.parent / "results"
+    _results_dir.mkdir(parents=True, exist_ok=True)
+    _out_path = _results_dir / "loss_curves.png"
     plt.savefig(_out_path)
     plt.close()
     logger.info(f"loss curve plot saved to: {_out_path}")
@@ -403,11 +428,13 @@ if __name__ == "__main__":
 
     c_matrix = confusion_matrix(test_labels.cpu().numpy(), 
                                 test_predictions.cpu().numpy(), 
-                                display_labels=ds.classes, 
                                 normalize='true'
                             )
-    ConfusionMatrixDisplay(confusion_matrix=c_matrix).plot()
-    plt.savefig(ROOT / "logs" / "confusion_matrix.png")
+    ConfusionMatrixDisplay(confusion_matrix=c_matrix, 
+                                display_labels=ds.classes).plot()
+    _results_dir = ROOT.parent / "results"
+    _results_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(_results_dir / "confusion_matrix.png")
     plt.close()
 
     logger.info(f"\n{classification_report(test_labels.cpu().numpy(), test_predictions.cpu().numpy(), target_names=ds.classes)}")

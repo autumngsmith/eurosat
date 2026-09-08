@@ -1,36 +1,18 @@
 # Fine tune a CNN on Eurosat
 
-#### evaluation
-
-- [x] Test-set accuracy — but do not stop here.
-- [x] **Confusion matrix.** Which classes get confused? Expect trouble between spectrally similar classes.
-- [x] Per-class precision/recall (`classification_report`).
-- [ ] Pull 6–8 misclassified images and actually look at them. Write down what you think went wrong.
-- [ ] Compare frozen-backbone vs. full fine-tune numbers. State how much transfer learning bought you.
-
-#### Claude setup
- - [ ] Hooks: claude can read the raw data file, but may not write to that file
- - [ ] Claude must edit the TODO.md file before 
- - [ ] have claude set up a study guide about CNN's and the workflow
-
- #### Part N
- - [ ] data tests
- - [ ] unit tests
-
-
 ## Complete
 
 #### Setup 
 
 - [x] New repo, `eurosat`
-- [x] Local venv - easier setup and device fine for it ~~or Colab — pick one and don't relitigate it. Colab if you want a free GPU.~~
+- [x] Local venv - easier setup and device fine for it 
 - [x] `pip install torch torchvision matplotlib scikit-learn`
 - [x] Download EuroSAT RGB (27,000 images, 64×64, 10 land-use classes, ~2 GB). Available through `torchvision.datasets.EuroSAT` or from the original release.
 - [x] Verify it loads and display a 3×3 grid of images with class labels. **Look at the data before modeling it.**
 
 #### Data pipeline - move to src folder
 
-- [x] Train/val/test split — 70/15/15, stratified by class. Fix the random seed.
+- [x] Train/val/test split — 70/15/15, stratified by class. Set the random seed.
 - [x] Check class balance. Note any imbalance now so you're not confused by it later.
 - [x] `transforms`: 
     - [x] resize to 224 -- in progress
@@ -54,3 +36,12 @@
 - [x] Print train loss, val loss, val accuracy per epoch.
 - [x] Save the best checkpoint by val accuracy.
 - [x] Plot train vs. val loss curves. Confirm you can tell overfitting from underfitting by looking at them.
+
+#### evaluation
+
+- [x] Test-set accuracy — but do not stop here.
+- [x] **Confusion matrix.** Which classes get confused? Expect trouble between spectrally similar classes.
+- [x] Per-class precision/recall (`classification_report`).
+- [ ] Pull 6–8 misclassified images and actually look at them. Write down what you think went wrong.
+- [x] Compare frozen-backbone vs. full fine-tune numbers. State how much transfer learning bought you.
+

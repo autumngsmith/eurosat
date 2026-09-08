@@ -401,7 +401,11 @@ if __name__ == "__main__":
     logger.info(f"test accuracy: {round(test_pct_accuracy, 2)}")
     logger.info(f"test avg loss: {round(test_avg_loss, 2)}")
 
-    c_matrix = confusion_matrix(test_labels.cpu().numpy(), test_predictions.cpu().numpy())
+    c_matrix = confusion_matrix(test_labels.cpu().numpy(), 
+                                test_predictions.cpu().numpy(), 
+                                display_labels=ds.classes, 
+                                normalize='true'
+                            )
     ConfusionMatrixDisplay(confusion_matrix=c_matrix).plot()
     plt.savefig(ROOT / "logs" / "confusion_matrix.png")
     plt.close()

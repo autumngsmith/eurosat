@@ -4,6 +4,6 @@ data
 src/logs
 config.cfg
 notebooks/plot_transforms_getting_started.ipynb
-.DS_store
-.pt
+.DS_Store
+*.pt
 src/__pycache__

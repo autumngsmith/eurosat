@@ -63,10 +63,11 @@ eurosat/
 ├── README.md
 ├── .gitignore
 ├── src/
-│   ├── data_preparation.py       data transformation, model building, validation
-│   └── evaluate.py               produce evaluation artifacts
+│   ├── data_preparation.py     data transformation, model building, validation
+│   └── evaluate.py             produce evaluation artifacts
 ├── notebooks/
-└── data/             gitignored 
+├── results/                    where evaluation artifacts are created
+└── data/                       gitignored 
 ```
 
 ## AI Use

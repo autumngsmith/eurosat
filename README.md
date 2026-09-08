@@ -50,7 +50,7 @@ eurosat/
 
 ## AI Use
 
-Claude was used in this project to help answer questions and organize my thoughts so that I could focus on my learning goals. Claude was **not** used to write any code*. 
+Claude was used in this project to help answer questions and organize my thoughts so that I could focus on my learning goals. Claude was **not** used to write any code[^*]. 
 
 I prioritized understanding the implementation of a transfer learning approach over wrangling new syntax. I took notes as I learned, and used Claude to verify my notes for accuracy, for example:
 
@@ -93,7 +93,7 @@ Update: "optimizer.step() to record the ??" — it doesn't record anything; it a
 Also: "only updates the final layer" is true right now, specifically because the backbone is frozen — it's not a general fact about optimizer.step(). Once you unfreeze in the second phase, the same optimizer.step() call would update the whole network, assuming the optimizer is told about those newly-unfrozen parameters.
 ```
 
-The singular code exception is that claude wrote the method `plot_loss_curves()`; for this modeling exercise I cared about understanding transfer learning and chose to outsource that one graph. 
+[*^]: The singular code exception is that claude wrote the method `plot_loss_curves()`; for this modeling exercise I cared about understanding transfer learning and chose to outsource that one graph. 
 
 # Sources
 
